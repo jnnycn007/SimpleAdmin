@@ -69,9 +69,9 @@ const adCards: AdCard[] = [
     tag: "AI 工具",
     note: "邀请推荐",
     title: "性价比AI中转站推荐",
-    desc: "无需梯子，直接访问你的 AI 中转站。",
-    price: "支持 Codex 中转 · 直达官网",
-    points: ["点击后直接跳转到你部署好的站点。", "保留首页广告入口，访问路径更明确。", "适合长期作为首页推荐入口。"],
+    desc: "无需梯子，支持 Claude Code、GPT-5.5 和生图能力。",
+    price: "纯血 Codex 中转 · 直达官网",
+    points: ["支持 Claude Code，适合日常开发与代码协作。", "支持 GPT-5.5，覆盖更广的通用 AI 使用场景。", "支持生图，日常文生图需求也可直接使用。"],
     cta: "前往站点",
     link: "https://ai.52moyu.net"
   },
