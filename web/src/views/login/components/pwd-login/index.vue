@@ -115,7 +115,7 @@ const handleSubmit = (formEl: FormInstance | undefined) => {
   formEl.validate(async valid => {
     if (!valid) return;
     await loginPwd({ ...loginForm, password: smCrypto.doSm2Encrypt(loginForm.password) }).catch(async () => {
-      await loginCaptcha(); // 加载验证码
+      if (captchaOpen.value) await loginCaptcha(); // 仅在开启验证码时刷新，否则验证码不渲染，请求无意义
     }); // 调用登录接口
   });
 };
