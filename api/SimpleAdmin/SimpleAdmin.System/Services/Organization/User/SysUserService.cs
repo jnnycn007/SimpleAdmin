@@ -813,7 +813,6 @@ public class SysUserService : DbRepository<SysUser>, ISysUserService
     public async Task<FileStreamResult> Template()
     {
         var templateName = "用户信息";
-        //var result = _importExportService.GenerateLocalTemplate(templateName);
         var result = await _importExportService.GenerateTemplate<SysUserImportInput>(templateName);
         return result;
     }

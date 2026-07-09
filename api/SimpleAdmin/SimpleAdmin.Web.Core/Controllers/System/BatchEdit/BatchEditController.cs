@@ -15,6 +15,7 @@ namespace SimpleAdmin.Web.Core;
 /// </summary>
 [ApiDescriptionSettings(Tag = "批量修改")]
 [Route("/sys/batch")]
+[SuperAdmin]
 public class BatchEditController : BaseController
 {
     private readonly IBatchEditService _batchEditService;
