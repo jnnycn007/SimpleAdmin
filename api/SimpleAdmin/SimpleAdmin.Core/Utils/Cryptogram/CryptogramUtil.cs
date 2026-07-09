@@ -27,16 +27,6 @@ public class CryptogramUtil
         // 解密
         if (!string.IsNullOrWhiteSpace(str))
             return SM2Util.Decrypt(str);
-        try
-        {
-            // // 解密
-            // if (!string.IsNullOrWhiteSpace(str))
-            //     return SM2Util.Decrypt(str);
-        }
-        catch
-        {
-            return "";
-        }
         return "";
     }
 
