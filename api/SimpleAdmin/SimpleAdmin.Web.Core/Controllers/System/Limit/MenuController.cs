@@ -96,7 +96,6 @@ public class MenuController : BaseController
     public async Task<dynamic> Detail([FromQuery] BaseIdInput input)
     {
         return await _menuService.Detail(input);
-        ;
     }
 
     /// <summary>

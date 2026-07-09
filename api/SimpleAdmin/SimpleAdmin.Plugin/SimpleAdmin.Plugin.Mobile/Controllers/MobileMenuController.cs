@@ -47,7 +47,6 @@ public class MobileMenuController : IDynamicApiController
     public async Task<dynamic> Tree([FromQuery] MenuTreeInput input)
     {
         return await _mobileMenuService.Tree(input);
-        ;
     }
 
     /// <summary>
@@ -129,7 +128,6 @@ public class MobileMenuController : IDynamicApiController
     public async Task<dynamic> Detail([FromQuery] BaseIdInput input)
     {
         return await _mobileMenuService.Detail(input);
-        ;
     }
 
     /// <summary>

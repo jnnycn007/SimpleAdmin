@@ -238,11 +238,6 @@ public class UserCenterService : DbRepository<SysUser>, IUserCenterService
     public async Task UpdateSignature(UpdateSignatureInput input)
     {
         var signatureArray = input.Signature.Split(",");//分割
-        // var base64String = signatureArray[1];//根据逗号分割取到base64字符串
-        // var image = base64String.GetSkBitmapFromBase64();//转成图片
-        // var resizeImage = image.ResizeImage(100, 50);//重新裁剪
-        // var newBase64String = resizeImage.ImgToBase64String();//重新转为base64
-        // var newSignature = signatureArray[0] + "," + newBase64String;//赋值新的签名
 
         //更新签名
         var result = await UpdateSetColumnsTrueAsync(it => new SysUser
@@ -291,9 +286,6 @@ public class UserCenterService : DbRepository<SysUser>, IUserCenterService
             throw Oops.Bah("密码必须包含大写字母");
         if (containChar && !Regex.IsMatch(newPassword, "[~!@#$%^&*()_+`\\-={}|\\[\\]:\";'<>?,./]"))
             throw Oops.Bah("密码必须包含特殊字符");
-        // var similarity = PwdUtil.Similarity(password, newPassword);
-        // if (similarity > 80)
-        //     throw Oops.Bah($"新密码请勿与旧密码过于相似");
         newPassword = CryptogramUtil.Sm4Encrypt(newPassword);//SM4加密
         userInfo.Password = newPassword;
         await UpdateSetColumnsTrueAsync(it => new SysUser { Password = newPassword }, it => it.Id == userInfo.Id);//更新密码

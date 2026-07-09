@@ -65,9 +65,6 @@ public class MenuService : DbRepository<SysResource>, IMenuService
             //获取所有菜单
             sysResources = (await _resourceService.GetAllModuleAndMenuAndSpaList())
                 .Where(it => it.Status == CommonStatusConst.ENABLE).ToList();
-        // //获取所有单页
-        // var sysSpas = (await _resourceService.GetConfigsByCategory(CateGoryConst.RESOURCE_SPA))
-        //     .Where(it => it.Status == CommonStatusConst.ENABLE).ToList();
         sysResources.ForEach(it =>
         {
             if (it.MenuType == SysResourceConst.CATALOG)

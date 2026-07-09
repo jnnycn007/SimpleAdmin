@@ -104,7 +104,6 @@ public class SpaService : DbRepository<SysResource>, ISpaService
         }
         else if (sysResource.MenuType == SysResourceConst.IFRAME || sysResource.MenuType == SysResourceConst.LINK)//如果是内链或者外链
         {
-            // sysResource.Name = RandomHelper.CreateNum(10);//设置name为随机数
             sysResource.Name = null;//设置name为标题
             sysResource.Component = null;
         }
