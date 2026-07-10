@@ -111,7 +111,7 @@ const proTable = ref<ProTableInstance>();
 // 表格配置项
 const columns: ColumnProps<SysRole.SysRoleInfo>[] = [
   { type: "selection", fixed: "left", width: 50 },
-  { prop: "name", label: "角色名称", search: { el: "input" } },
+  { prop: "name", label: "角色名称", search: { el: "input", key: "searchKey" } },
   { prop: "code", label: "角色编码", search: { el: "input" } },
   { prop: "status", label: "状态", enum: statusOptions, search: { el: "select" } },
   { prop: "sortCode", label: "排序" },
