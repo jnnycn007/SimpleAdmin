@@ -119,6 +119,13 @@ public class ConfigService : DbRepository<SysConfig>, IConfigService
     /// <inheritdoc/>
     public async Task Edit(ConfigEditInput input)
     {
+        //按Id查出真实记录校验分类，而非信任请求体：否则内置配置(SYS_BASE/MQTT_BASE等)会被
+        //CheckInput 无条件改写成 BIZ_DEFINE,既绕过 Delete 的内置保护,又使原分类的缓存key不被刷新
+        var config = await GetFirstAsync(it => it.Id == input.Id);
+        if (config == null)
+            throw Oops.Bah("配置不存在");
+        if (config.Category != CateGoryConst.CONFIG_BIZ_DEFINE)
+            throw Oops.Bah("不可编辑系统内置配置");
         await CheckInput(input);
         var devConfig = input.Adapt<SysConfig>();//实体转换
         if (await UpdateAsync(devConfig))//更新数据
