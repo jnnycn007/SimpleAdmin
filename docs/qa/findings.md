@@ -44,7 +44,7 @@
 | A35 | 5 | 消息/mqtt | api System/Services/Mqtt/MqttService.cs:44 | 中 | 密码占位符判断误写成 `password.ToLower() == "$username"`，注释却是"当前token作为mqtt密码"。把配置改成 $token 永远命不中，这条避免共享凭证的逃生通道从未生效 | 复制粘贴上方用户名分支时漏改字面量 | 待你确认 | A34 的成因。修法要先定占位符字面量语义($token? $password?)，一行改动但影响 mqtt 连接行为 |
 | A36 | 5 | 安全/上传 | api Web.Core/Controllers/System/Upload/UploadController.cs:14-38；System/Services/Dev/File/FileService.cs:121-161 | 中 | POST /sys/upload/uploadImg 无任何权限标注 + [DisableRequestSizeLimit]，链路中无文件类型/大小校验(IsPic 仅决定是否生成缩略图，不拦截) → 任意登录用户可上传任意类型、任意大小文件落本地磁盘 | 端点漏标 + 业务层缺校验 | 待你确认 | 需先定"谁该能传、允许什么类型、多大上限"。FileController(Dev版)已加[SuperAdmin]，但这个通用上传口看起来是给业务用户用的 |
 | A37 | 5 | 岗位/路由 | api Web.Core/Controllers/Application/Organization/BizPositionController.cs:19 | 中 | BizPositionController 是裸类，既不继承 BaseController 也不实现 IDynamicApiController → 未被 MoYu 动态控制器扫描，biz 岗位管理整页后端路由应全部 404 | 漏写接口标记。同目录 BizOrgController.cs:19/BizRoleController.cs:19/BizUserController.cs:19 均显式 `: IDynamicApiController`；全项目搜该接口命中15个文件，本文件不在其中 | 待你确认 | 类级的[RolePermission]挂在一个根本没被扫描的类上=形同虚设。修法(加 : IDynamicApiController)一行，但会凭空启用一整套此前不存在的端点，属行为改动，请你定 |
-| A38 | 5 | 角色/授权 | web sys/limit/role/components/grantResource.vue:64-65,368-375；grantPermission.vue:34-35 | — | 取证 agent 报告「授权资源」「授权权限」弹窗的确定/取消按钮点击后零请求、零 console、弹窗不关闭，仅右上角×可关 | 静态复核不支持：两个按钮均正常绑定 @click(onClose/handleSubmit)，handleSubmit 无早退分支，FormContainer 确实透传 #footer 插槽。三个观察特征(零请求+零console+×可关)符合"CDP 点击落在视口外元素"的取证工具伪影 | 待确认 | 需人工或换取证方式复测：打开授权弹窗→滚到底部→点确定→看 network 是否发出 grantResource 请求。复测前不作为 bug 处理 |
+| A38 | 5 | 角色/授权 | web sys/limit/role/components/grantResource.vue:64-65,368-375；grantPermission.vue:34-35 | — | 取证 agent 报告「授权资源」「授权权限」弹窗的确定/取消按钮点击后零请求、零 console、弹窗不关闭，仅右上角×可关 | 静态复核不支持：两个按钮均正常绑定 @click(onClose/handleSubmit)，handleSubmit 无早退分支，FormContainer 确实透传 #footer 插槽。三个观察特征(零请求+零console+×可关)符合"CDP 点击落在视口外元素"的取证工具伪影 | 已驳回 | 复测坐实为取证工具伪影：JS 求值显示两个 footer 按钮 rect.top=698、inViewport=false(弹窗高于视口，footer 被裁在可视区外)，坐标点击落空；改用 DOM .click() 程序化触发后，POST /api/sys/limit/role/grantResource 返回 200 且弹窗正常关闭(.el-dialog 计数 1→0)。按钮与 @click 绑定均正常，非产品 bug |
 | A39 | 5 | 前端/公共组件 | web src/components/Form/FormContainer/index.vue:31,34,58 | 低 | FormContainer 内部自建 `const visible = ref(false)` 却从未声明 modelValue prop；父组件的 v-model 是靠 `v-bind="$attrs"`(第34行，位置在 v-model 之后覆盖了它)阴差阳错透传给 el-dialog 才生效 | 组件契约与实现不符，能跑但脆(依赖属性绑定顺序) | 待你确认 | 全站弹窗都走这个公共组件，改动面大。不改行为的前提下应显式声明 modelValue prop，属公共组件改动 |
 
 ## 已覆盖区域
@@ -102,7 +102,9 @@
 - 四路并发取证：Controller 权限标注全量清点、数据范围后端链路静态审查、运行态越权复验(被封锁)、资源页浏览器取证。
 - 修复 3 个 P0：A31 GrantResource / A32 GrantUser 无数据范围校验、A33 Edit 校验攻击者可控字段。commit 9ab64e3，仅编译级验证。
 - 待你确认 6 个：A34 mqtt 明文凭证泄露、A35 mqtt 占位符误写、A36 通用上传口无标注无校验、A37 BizPosition 路由未注册、A39 FormContainer v-model 契约不符。
-- 待确认 1 个：A38 授权弹窗按钮无响应(疑取证工具伪影，静态复核不支持，需复测)。
+- 已驳回 1 个：A38 授权弹窗按钮无响应 —— 复测确认是 agent-browser 坐标点击落在视口外(inViewport=false)，
+  改用 DOM .click() 后请求正常发出、弹窗正常关闭。静态复核(按钮 @click 绑定完好、handleSubmit 无早退)先于复测给出了正确判断。
+  ★方法论沉淀：子 agent 报"点了没反应"时，先静态复核绑定，再让它用 JS 求值查 inViewport + DOM .click() 对照，别直接入账。
 - 已排除：资源树父子级联全选属标准行为；数据范围弹窗 1280/1920 布局均正常；角色名称搜索正常(A13 修复有效)。
 - 菜单名称搜索失效获得运行态证据(tree?title=... 发出但结果未过滤)，归入既有 A27，不重复登记。
 - ★阻塞：本会话 Bash/PowerShell 执行通道被安全检查整体封锁(curl/node/甚至本地 find 均被拒)，
