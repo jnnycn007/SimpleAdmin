@@ -37,6 +37,16 @@
 | A29 | 4 | 代码生成 | web biz/ops/test/index.vue:49-51；api 无对应 Controller | 低 | biz/ops/test 页调 biz/ops/test/page，但仓库无该 Controller/Service,仅有实体 GenTest.cs 和代码生成模板 | 代码生成 demo 残留,后端未生成 | 待你确认 | 是删该 demo 页还是补生成后端,请你定;非静默失效类 bug |
 | A30 | 4 | 消息 | api System/Services/Dev/Message/MessageService.cs Add；Entity SysMessage.ReceiverInfo | 低 | message/add 不传 ReceiverInfo 时,DB 列 NOT NULL 直接抛 500"操作失败"(超管也复现,日志 2026-07-10.log:28)。缺业务层必填校验,把 DB 约束异常暴露成 500 | 入参未校验 ReceiverInfo 必填,依赖 DB 约束兜底 | 待确认 | 健壮性 bug,非越权。应在 Add 里校验必填并返回友好提示,或给 ReceiverInfo 默认空集合。运行态实证时发现 |
 
+| A31 | 5 | 权限/数据范围 | api Application/Services/Organization/Role/RoleService.cs:147-150(原) | 高(P0) | biz 角色管理 GrantResource 纯透传，一次 CheckApiDataScope 都没调；机构管理员可对数据范围外的角色授权，并授予自己都没有的系统管理菜单(越权提权) | 该调用的数据范围校验完全不存在；同文件 Delete(168-175)/Detail(82-85) 是"先查真实记录再校验"的正确写法，属遗漏非设计 | 已修复(仅编译验证) | 照 UserService 样板补校验，commit 9ab64e3；dotnet build Application --framework net8.0 → 0警告0错误。★运行态越权复验未做(本会话 curl/node 执行通道被安全检查封锁) |
+| A32 | 5 | 权限/数据范围 | api RoleService.cs:153-156(原)；SysRoleService.cs:453-486 | 高(P0) | biz 角色管理 GrantUser 同样零校验：角色 Id 和被授权用户 Id 均来自请求体，未校验任一方在调用者数据范围内 → 可把任意机构用户绑到任意角色 | 同 A31 | 已修复(仅编译验证) | commit 9ab64e3：先校验角色，再取被授权用户真实记录走 CheckApiDataScope 列表重载。查不到的用户 Id 静默跳过(与 Delete 同风格，不影响越权面) |
+| A33 | 5 | 权限/数据范围 | api RoleService.cs:140-144,186-192(原) | 高(P0) | biz 角色 Edit 的数据范围校验形同虚设：复用 Add 的 CheckInput，校验的是请求体里可篡改的 OrgId/CreateUserId，而非 input.Id 在库中真实角色的字段 | Edit 误用了 Add 的校验(Add 用请求体字段是正确的，新增时无真实记录)；对照 UserService.cs:274-280 是先按 Id 查库再校验 | 已修复(仅编译验证) | commit 9ab64e3：拆出 CheckBusinessRule 保留业务规则，Edit 改用库中真实角色校验，Add 语义不变 |
+| A34 | 5 | 安全/凭证 | api Web.Core/Controllers/System/Mqtt/MqttController.cs:22；System/Services/Mqtt/MqttService.cs:20-59；SeedData/Json/seed_sys_config.json:277,294 | 高 | GET /mqtt/getParameter 无任何权限标注(JwtHandler:140 兜底放行)，直接返回 sys_config 里的 MQTT 用户名/密码，种子值为明文 admin/admin → 任意已登录用户(含最低权限账号)可拿到 broker 共享凭证 | 端点漏标 + 服务端原样下发共享凭证 | 待你确认 | 修法涉及占位符语义(见A35)与 SeedData，属行为改动。可选：改用 $token 方案下发当前 JWT 作 mqtt 密码 / 给端点加权限标注 |
+| A35 | 5 | 消息/mqtt | api System/Services/Mqtt/MqttService.cs:44 | 中 | 密码占位符判断误写成 `password.ToLower() == "$username"`，注释却是"当前token作为mqtt密码"。把配置改成 $token 永远命不中，这条避免共享凭证的逃生通道从未生效 | 复制粘贴上方用户名分支时漏改字面量 | 待你确认 | A34 的成因。修法要先定占位符字面量语义($token? $password?)，一行改动但影响 mqtt 连接行为 |
+| A36 | 5 | 安全/上传 | api Web.Core/Controllers/System/Upload/UploadController.cs:14-38；System/Services/Dev/File/FileService.cs:121-161 | 中 | POST /sys/upload/uploadImg 无任何权限标注 + [DisableRequestSizeLimit]，链路中无文件类型/大小校验(IsPic 仅决定是否生成缩略图，不拦截) → 任意登录用户可上传任意类型、任意大小文件落本地磁盘 | 端点漏标 + 业务层缺校验 | 待你确认 | 需先定"谁该能传、允许什么类型、多大上限"。FileController(Dev版)已加[SuperAdmin]，但这个通用上传口看起来是给业务用户用的 |
+| A37 | 5 | 岗位/路由 | api Web.Core/Controllers/Application/Organization/BizPositionController.cs:19 | 中 | BizPositionController 是裸类，既不继承 BaseController 也不实现 IDynamicApiController → 未被 MoYu 动态控制器扫描，biz 岗位管理整页后端路由应全部 404 | 漏写接口标记。同目录 BizOrgController.cs:19/BizRoleController.cs:19/BizUserController.cs:19 均显式 `: IDynamicApiController`；全项目搜该接口命中15个文件，本文件不在其中 | 待你确认 | 类级的[RolePermission]挂在一个根本没被扫描的类上=形同虚设。修法(加 : IDynamicApiController)一行，但会凭空启用一整套此前不存在的端点，属行为改动，请你定 |
+| A38 | 5 | 角色/授权 | web sys/limit/role/components/grantResource.vue:64-65,368-375；grantPermission.vue:34-35 | — | 取证 agent 报告「授权资源」「授权权限」弹窗的确定/取消按钮点击后零请求、零 console、弹窗不关闭，仅右上角×可关 | 静态复核不支持：两个按钮均正常绑定 @click(onClose/handleSubmit)，handleSubmit 无早退分支，FormContainer 确实透传 #footer 插槽。三个观察特征(零请求+零console+×可关)符合"CDP 点击落在视口外元素"的取证工具伪影 | 待确认 | 需人工或换取证方式复测：打开授权弹窗→滚到底部→点确定→看 network 是否发出 grantResource 请求。复测前不作为 bug 处理 |
+| A39 | 5 | 前端/公共组件 | web src/components/Form/FormContainer/index.vue:31,34,58 | 低 | FormContainer 内部自建 `const visible = ref(false)` 却从未声明 modelValue prop；父组件的 v-model 是靠 `v-bind="$attrs"`(第34行，位置在 v-model 之后覆盖了它)阴差阳错透传给 el-dialog 才生效 | 组件契约与实现不符，能跑但脆(依赖属性绑定顺序) | 待你确认 | 全站弹窗都走这个公共组件，改动面大。不改行为的前提下应显式声明 modelValue prop，属公共组件改动 |
+
 ## 已覆盖区域
 
 - 鉴权后端链路（AuthController/AuthService/JwtHandler/事件订阅）— 已静态审查
@@ -48,6 +58,9 @@
 - ✅ A04 越权已运行态验证并修复(见A12)；biz/organization 下 role+position 搜索副本同 A13 模式待验
 - 消息中心/文件管理 越权面 — 第4轮运行态坐实并修复(A22/A23)，页面 UI 本身未系统性走查
 - 全站搜索列参数对齐 — 第4轮横扫(A20/A26/A27/A28)，静默失效模式已识别
+- Controller 权限标注全量清点 — 第5轮完成(31个)。系统管理面全部有[SuperAdmin]或[RolePermission]；类级无标注的 UserCenter/AuthB/Common 属自助面或匿名面，设计如此。**除已修的外无新增漏标 P0**
+- 资源与权限(数据范围) — 第5轮完成：biz 角色授权链路静态审查(查出A31-A33三个P0)、菜单管理+角色管理+授权资源/数据范围弹窗浏览器取证
+- ⚠️ 数据范围的运行态越权验证始终未做(curl/node 执行通道被安全检查封锁)，A12/A22/A23/A31-A33 均只有静态或编译级证据
 
 ## 各轮小结
 
@@ -84,3 +97,17 @@
 - 根因归纳：JwtHandler.cs:140 对无 [SuperAdmin]/[RolePermission] 标注的端点直接 return true —— 漏标即默认放行，
   这是 A12/A22/A23 的同一个源头。第5轮起把"Controller 权限标注全量清点"作为固定动作。
 - 累积待你确认：A02 A03 A07 A09 A16 A17 A20 A21 A26 A27 A29。
+
+### 第 5 轮（资源与权限 / 数据范围）
+- 四路并发取证：Controller 权限标注全量清点、数据范围后端链路静态审查、运行态越权复验(被封锁)、资源页浏览器取证。
+- 修复 3 个 P0：A31 GrantResource / A32 GrantUser 无数据范围校验、A33 Edit 校验攻击者可控字段。commit 9ab64e3，仅编译级验证。
+- 待你确认 6 个：A34 mqtt 明文凭证泄露、A35 mqtt 占位符误写、A36 通用上传口无标注无校验、A37 BizPosition 路由未注册、A39 FormContainer v-model 契约不符。
+- 待确认 1 个：A38 授权弹窗按钮无响应(疑取证工具伪影，静态复核不支持，需复测)。
+- 已排除：资源树父子级联全选属标准行为；数据范围弹窗 1280/1920 布局均正常；角色名称搜索正常(A13 修复有效)。
+- 菜单名称搜索失效获得运行态证据(tree?title=... 发出但结果未过滤)，归入既有 A27，不重复登记。
+- ★阻塞：本会话 Bash/PowerShell 执行通道被安全检查整体封锁(curl/node/甚至本地 find 均被拒)，
+  运行态越权验证无法进行。A12/A22/A23 的销账与 A31-A33 的复验均欠着，需用户放行权限或手动跑 curl。
+- 根因复盘：A31-A33 与 A12/A22/A23 是同一类病 —— 权限/数据范围校验靠"每个方法自觉调一次"，
+  漏调即默认放行。JwtHandler:140 的"无标注即放行"是接口级的表现，RoleService 的"忘了调 CheckApiDataScope"
+  是数据级的表现。默认值反了。彻底修法是默认拒绝+显式放行，属架构改动，待用户拍板。
+- 累积待你确认：A02 A03 A07 A09 A16 A17 A20 A21 A26 A27 A29 A34 A35 A36 A37 A39。
