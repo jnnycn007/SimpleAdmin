@@ -17,14 +17,25 @@
 | A09 | 2 | 菜单/路由 | api SeedData/Json/seed_sys_resource.json:1246-1254；web/src/views/sys/ops/(无monitor) | 中 | 「系统运维→会话管理」进入后主区白屏，2/2稳定复现，控制台 Vue Router warn 路由缺组件，页面零请求 | 菜单 Component 指向 sys/ops/monitor/index，但 web/src/views/sys/ops 下无 monitor 视图文件，动态路由绑不到组件 | 待你确认 | 修法=新建该会话管理页(功能开发)或从SeedData删该菜单(改种子数据)，均超"只修bug"范围 |
 | A10 | 2 | 菜单/路由 | api MenuController.cs:99;MobileMenuController.cs:51,133;MenuService.cs:68-70;UserCenterService.cs:242-245,294;SpaService.cs:107 | 低 | 死代码：3处return后孤立分号空语句 + 4处注释掉的死代码块 | 复制粘贴/遗留 | 已修复 | 已删7处；三改动项目单独dotnet build 均0错误0警告；全量build仅DLL文件锁(运行中进程)非编译错误 |
 | A11 | 2 | 菜单/路由 | web 前端(仅dev模式) | 低 | 首次访问未访问过的页面时整屏闪白、需点两次才进 | UnoCSS按需生成CSS触发Vite HMR热重载导致应用重挂载，仅开发模式 | 已驳回 | 生产 build:pro 无HMR不存在此现象 |
-| A12 | 3 | 权限/越权 | api Web.Core/Controllers/System/BatchEdit/BatchEditController.cs:18；JwtHandler.cs:109-141 | 高(P0) | 非超管用户 qauser 可调 BatchEdit 全部8端点含写(delete/sync/config 均200进业务)，/tables 可读 sys_user 表结构含Password列 | 类级漏标[SuperAdmin]，JwtHandler对无[SuperAdmin]/[RolePermission]标注端点直接return true；Columns上孤立的[IgnoreSuperAdmin]佐证类级本应有[SuperAdmin] | 已修复 | 加[SuperAdmin]；Web.Core build 0错误；实测+代码双证；★运行态复验需重建重启API(当前为旧构建) |
+| A12 | 3 | 权限/越权 | api Web.Core/Controllers/System/BatchEdit/BatchEditController.cs:18；JwtHandler.cs:109-141 | 高(P0) | 非超管用户 qauser 可调 BatchEdit 全部8端点含写(delete/sync/config 均200进业务)，/tables 可读 sys_user 表结构含Password列 | 类级漏标[SuperAdmin]，JwtHandler对无[SuperAdmin]/[RolePermission]标注端点直接return true；Columns上孤立的[IgnoreSuperAdmin]佐证类级本应有[SuperAdmin] | 已修复(运行态已验证) | 第4轮销账：新构建下 qauser 调 /sys/batch/tables 和 /sys/batch/config 均 code:403 被拒，超管 200 正常放行；columns 非超管可调是设计(显式[IgnoreSuperAdmin])。★挂账清除 |
 | A13 | 3 | 角色/岗位 | web sys/limit/role/index.vue:108；sys/organization/position/index.vue:76 | 中 | 角色名称搜索无效，返回全部未过滤且所搜项不在首页 | 前端搜索列 prop:"name" 发 name 参数，后端 RolePageInput 只有继承的 SearchKey，模型绑定丢弃 name → 过滤跳过 | 已修复 | 加 search.key:"searchKey" 对齐全局约定；type:check+lint 0错误；岗位页同bug一并修 |
 | A14 | 3 | 用户 | api SysUserService.cs:816 | 低 | Template() 内一行注释掉的旧实现死代码 | 遗留 | 已修复 | 已删；System build 0错误0警告 |
 | A15 | 3 | 用户 | api SysUserService.cs:744 | 低 | 删除用户处 TODO"踢下线/永久注销未实现"，仅清token缓存哈希项 | 功能未实现 | 待确认 | 清token缓存可能已足够使其失效，需运行态验证删掉用户的现有token是否真失效 |
 | A16 | 3 | 角色 | api SysRoleService.cs:492-538 Delete | 中 | 删角色不校验"仍被用户持有"直接删，静默删除用户-角色关系；而机构/岗位删除前都拦截引用 | 三者删除校验不一致 | 待你确认 | 是有意级联清理还是应像机构/岗位拦截，行为改动请你定 |
-| A17 | 3 | 鉴权 | api SimpleAdmin.System AuthService.BeforeLogin (origin.Split("//")[1]) | 中 | 多租户模式登录请求缺 Origin/Referer 头时 origin.Split("//")[1] 抛 IndexOutOfRange → 500 | 数组越界无防护 | 待确认 | 浏览器正常带Origin不触发，主要影响API直连；需定位确切行号后定修法 |
+| A17 | 3 | 鉴权 | api AuthService.cs:211 BeforeLogin | 中 | 已坐实：不带 TenantId/缺 Origin 头登录时 AuthService.cs:211 抛 IndexOutOfRangeException → 500(日志 Web.Entry/logs/Error/2026-07-10.log:4-17)。第4轮 p0-verify 登录时意外复现 | origin.Split("//")[1] 数组越界无防护 | 待你确认 | 已有确切行号+运行态证据。修法：Split 前判空/判长度,或用 Uri.TryCreate。小改但涉登录链路,请你确认后修 |
 | A18 | 3 | 用户 | web sys/organization/user 新增表单 | 低 | 新增用户账号字段无长度上限，200+超长账号原样入库(name含<script>渲染时Vue转义安全非XSS) | 缺前后端长度校验 | 待确认 | 低危;加maxlength属小改但非明确bug |
 | A19 | 3 | 用户 | web sys/organization/user/index.vue 1280宽 | 低 | 1280宽下用户表格右侧列被推出需横向滚动 | 列多宽度不足 | 待确认 | 非破坏性,窄屏体验,暂不改 |
+| A20 | 4 | 角色/岗位 | web sys/limit/role/index.vue:115；sys/organization/position/index.vue:83；biz 下同名两页 | 中 | 「角色编码/岗位编码」搜索框静默空操作：填了点搜索无反应，返回全部数据 | 前端发 `code` 参数，但 RolePageInput/PositionPageInput 全继承链无 `Code` 字段，模型绑定丢弃；后端只有 `.WhereIF(SearchKey→Name.Contains)` | 待你确认 | 不能照 A13 映射成 searchKey(那会变成按名称搜)。修法二选一：后端加 Code 字段+WhereIF(倾向) / 删掉该搜索框。属行为改动 |
+| A21 | 4 | 角色 | api Services/Limit/Role/Dto/RoleInput.cs:16 | 低 | `RolePageInput : PositionPageInput` 空类，角色分页入参继承岗位分页入参，白捡 OrgId/OrgIds/Category/Status 等无关字段 | 语义错误的继承，图省事复用 | 待你确认 | 改继承会牵动模型绑定与既有调用方,不擅动 |
+| A22 | 4 | 权限/越权 | api Web.Core/Controllers/System/Dev/MessageController.cs:10；System/Services/Dev/Message/MessageService.cs:78-80,130-135,189-208 | 高(P0) | 运行态坐实：qauser(非超管)可 GET message/page 拿全表消息(含发给超管/他人的)、可 POST message/add ReceiverType=ALL 全站广播成功(createUser=qauser)。Edit/Delete 无所有权校验 | 类级漏标[SuperAdmin]，JwtHandler.cs:140 对无权限特性端点直接 return true(与 A12 同源) | 已修复 | 类级加[SuperAdmin]，commit b2881c3。修法安全已确证：UserCenter 有独立"我的消息"接口(MyMessagePage 按 UserId 过滤)，普通用户不依赖 sys/dev/message/*。★运行态复验待第5轮(API 已按新构建重启) |
+| A23 | 4 | 权限/越权 | api Web.Core/Controllers/System/Dev/FileController.cs;System/Services/Dev/File/FileService.cs:26-34,54-58,100-112 | 高(P0) | 运行态坐实：qauser(非超管)可 GET file/page 拿全系统13个文件(含StoragePath)。Delete/Download 按 ID 直操作无所有权校验(按红线未实测删,静态确认) | 同 A22，JwtHandler.cs:140 | 已修复 | 类级加[SuperAdmin]，commit b2881c3。修法安全已确证：download 仅管理页 sys/dev/file/index.vue:88 调用,uniapp 完全不调 file 端点。★运行态复验待第5轮 |
+| A24 | 4 | 鉴权 | api AuthService.cs:116-132,447-468 LoginOut | — | 静态证据推翻假设 | RemoveTokenFromRedis 作用域始终被 UserManager.UserId(调用者自身JWT claims)限定,input.Token 只在调用者自己的 token 列表内做相等匹配。传他人 token 最多自己列表找不到匹配(无效果),无法登出他人 | 已驳回 | 非漏洞,误报。LoginOut 也无[AllowAnonymous],需合法JWT才可达 |
+| A25 | 4 | 机构 | api Application/Services/Organization/Org/OrgService.cs:32-40 | 中 | biz 机构管理页「分类」筛选静默失效：DTO SysOrgPageInput 有 Category 字段、前端已发 category 参数，但 biz 侧 Page 只有 ParentId/Name/Code/Status 四个 WhereIF，漏了 Category 过滤 | Service 层实现遗漏(sys 侧 SysOrgService.cs:96 有该过滤，biz 复用同 DTO 但漏抄一行) | 已修复 | 修法安全,照 sys 侧补一行 WhereIF(Category);已复核两侧源码 |
+| A26 | 4 | 消息 | web sys/dev/message/index.vue:97；api Services/Dev/Message/Dto/MessageInput.cs:13-19 | 低 | 站内信管理页「状态」搜索列静默空操作：发 status 参数，MessagePageInput 只有 Category+基类字段无 Status，Service 也无 status 过滤 | DTO 缺字段(同 A20 模式) | 待你确认 | 后端加 Status 字段+WhereIF / 删该列,二选一,行为改动 |
+| A27 | 4 | 菜单 | web sys/limit/menu/index.vue:101,111；sys/mobile/menu/index.vue:110-111；api MenuInput.cs:16-27 | 低 | 菜单管理页「名称 title/路径 path/类型 menuType」搜索列静默空操作：MenuTreeInput 只有 Module+SearchKey，无对应字段(Tree 接口,非分页) | DTO 缺字段(同 A20 模式) | 待你确认 | 后端加字段 / 改列参数,行为改动 |
+| A28 | 4 | 模块 | web sys/limit/module/index.vue:53；sys/mobile/module/index.vue:61 | 中 | 模块管理页「名称 title」搜索列静默失效：发 title 参数，ModulePageInput 只有 SearchKey，但 Service(ModuleService.cs:38) 已有 SearchKey→Title.Contains 过滤 | 前端列缺 key:"searchKey"(与已修复 name 列完全同型) | 已修复 | 修法安全,前端加 key;后端过滤逻辑现成 |
+| A29 | 4 | 代码生成 | web biz/ops/test/index.vue:49-51；api 无对应 Controller | 低 | biz/ops/test 页调 biz/ops/test/page，但仓库无该 Controller/Service,仅有实体 GenTest.cs 和代码生成模板 | 代码生成 demo 残留,后端未生成 | 待你确认 | 是删该 demo 页还是补生成后端,请你定;非静默失效类 bug |
+| A30 | 4 | 消息 | api System/Services/Dev/Message/MessageService.cs Add；Entity SysMessage.ReceiverInfo | 低 | message/add 不传 ReceiverInfo 时,DB 列 NOT NULL 直接抛 500"操作失败"(超管也复现,日志 2026-07-10.log:28)。缺业务层必填校验,把 DB 约束异常暴露成 500 | 入参未校验 ReceiverInfo 必填,依赖 DB 约束兜底 | 待确认 | 健壮性 bug,非越权。应在 Add 里校验必填并返回友好提示,或给 ReceiverInfo 默认空集合。运行态实证时发现 |
 
 ## 已覆盖区域
 
@@ -35,6 +46,8 @@
 - ⚠️ 会话管理(sys/ops/monitor)菜单白屏 = 缺失视图组件，见 A09
 - 用户/角色/机构/岗位 — 已完成浏览器CRUD取证(用户/角色增改删搜/授权/建受限用户qauser) + 后端四链路静态审查
 - ✅ A04 越权已运行态验证并修复(见A12)；biz/organization 下 role+position 搜索副本同 A13 模式待验
+- 消息中心/文件管理 越权面 — 第4轮运行态坐实并修复(A22/A23)，页面 UI 本身未系统性走查
+- 全站搜索列参数对齐 — 第4轮横扫(A20/A26/A27/A28)，静默失效模式已识别
 
 ## 各轮小结
 
@@ -60,3 +73,14 @@
 - 待确认 4 个：A15 删用户踢下线、A17 BeforeLogin 500、A18 账号超长、A19 1280布局。
 - 正常项：四Controller权限标注齐全、授权界面非超管禁系统菜单(招牌特性生效)、System层不套数据范围属正确(超管专属)、删机构/岗位有引用校验、无N+1/吞异常/async void。
 - 累积待你确认：A02 A03 A07 A09 A16。
+
+### 第 4 轮（越权面复验 + 搜索列横扫 + biz 侧机构）
+- A12 运行态销账(qauser 调 batch/tables、batch/config 均 403)；顺带发现 A22/A23 两个同源 P0 并修复。
+- 修复 4 个：A22 消息越权(P0)、A23 文件越权(P0)、A25 biz机构分类筛选、A28 模块名称搜索。
+  提交：b2881c3(A22/A23)、d31bebe(A25)、9ecfb5d(A28)。
+- 已驳回 1 个：A24 LoginOut 登出他人(静态证据推翻)。
+- 待你确认 4 个：A20 编码搜索缺后端字段、A21 RolePageInput 错误继承、A26 消息状态搜索、A27 菜单搜索列、A29 biz/ops/test 无后端。
+- 待确认 1 个：A30 message/add 缺 ReceiverInfo 校验 → 500。
+- 根因归纳：JwtHandler.cs:140 对无 [SuperAdmin]/[RolePermission] 标注的端点直接 return true —— 漏标即默认放行，
+  这是 A12/A22/A23 的同一个源头。第5轮起把"Controller 权限标注全量清点"作为固定动作。
+- 累积待你确认：A02 A03 A07 A09 A16 A17 A20 A21 A26 A27 A29。
