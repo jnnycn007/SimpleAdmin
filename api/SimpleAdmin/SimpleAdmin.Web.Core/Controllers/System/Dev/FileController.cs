@@ -15,6 +15,7 @@ namespace SimpleAdmin.Web.Core;
 /// </summary>
 [ApiDescriptionSettings(Tag = "文件管理")]
 [Route("sys/dev/[controller]")]
+[SuperAdmin]
 public class FileController : BaseController
 {
     private readonly IFileService _fileService;

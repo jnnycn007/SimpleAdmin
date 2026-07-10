@@ -15,6 +15,7 @@ namespace SimpleAdmin.Web.Core;
 /// </summary>
 [ApiDescriptionSettings(Tag = "站内信")]
 [Route("sys/dev/[controller]")]
+[SuperAdmin]
 public class MessageController : BaseController
 {
     private readonly IMessageService _messageService;
