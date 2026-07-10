@@ -58,7 +58,7 @@ const proTable = ref<ProTableInstance>();
 
 const columns: ColumnProps<MobileModule.MobileModuleInfo>[] = [
   { type: "selection", fixed: "left", width: 80 },
-  { prop: "title", label: "显示名称", search: { el: "input" } },
+  { prop: "title", label: "显示名称", search: { el: "input", key: "searchKey" } },
   { prop: "description", label: "描述" },
   {
     prop: "icon",

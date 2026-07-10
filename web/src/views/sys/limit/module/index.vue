@@ -50,7 +50,7 @@ const proTable = ref<ProTableInstance>();
 // 表格配置项
 const columns: ColumnProps<Module.ModuleInfo>[] = [
   { type: "selection", fixed: "left", width: 80 },
-  { prop: "title", label: "模块名称", search: { el: "input" } },
+  { prop: "title", label: "模块名称", search: { el: "input", key: "searchKey" } },
   {
     prop: "icon",
     label: "菜单图标",
