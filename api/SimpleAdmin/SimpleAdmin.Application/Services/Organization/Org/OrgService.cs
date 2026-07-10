@@ -34,6 +34,7 @@ public class OrgService : DbRepository<SysOrg>, IOrgService
             .WhereIF(input.ParentId > 0,
                 it => it.ParentId == input.ParentId || SqlFunc.JsonLike(it.ParentIdList, input.ParentId.ToString()))//父级
             .WhereIF(!string.IsNullOrEmpty(input.Name), it => it.Name.Contains(input.Name))//根据名称查询
+            .WhereIF(!string.IsNullOrEmpty(input.Category), it => it.Category == input.Category)//根据分类查询
             .WhereIF(!string.IsNullOrEmpty(input.Code), it => it.Code.Contains(input.Code))//根据编码查询
             .WhereIF(!string.IsNullOrEmpty(input.Status), it => it.Status == input.Status)//根据状态查询
             .OrderByIF(!string.IsNullOrEmpty(input.SortField), $"{input.SortField} {input.SortOrder}").OrderBy(it => it.SortCode)
