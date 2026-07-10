@@ -139,19 +139,45 @@ public class RoleService : IRoleService
     /// <inheritdoc/>
     public async Task Edit(RoleEditInput input)
     {
-        await CheckInput(input);//检查参数
+        CheckBusinessRule(input);//检查业务规则(赋值ROLE_ORG、禁止全局数据范围)
+        //编辑场景下请求体里的OrgId/CreateUserId可被篡改，需按Id查出真实角色再校验数据范围，防止越权编辑他人角色
+        var role = (await _sysRoleService.GetListAsync()).FirstOrDefault(it => it.Id == input.Id);
+        if (role == null)
+            throw Oops.Bah("角色不存在");
+        await _sysUserService.CheckApiDataScope(role.OrgId, role.CreateUserId.GetValueOrDefault(), "您没有权限编辑该角色");
         await _sysRoleService.Edit(input);
     }
 
     /// <inheritdoc/>
     public async Task GrantResource(GrantResourceInput input)
     {
+        //校验真实记录而非请求体字段，防止越权给自己无权限管理的角色授权资源
+        var role = (await _sysRoleService.GetListAsync()).FirstOrDefault(it => it.Id == input.Id);
+        if (role == null)
+            throw Oops.Bah("角色不存在");
+        await _sysUserService.CheckApiDataScope(role.OrgId, role.CreateUserId.GetValueOrDefault(), "您没有权限授权该角色");
         await _sysRoleService.GrantResource(input);
     }
 
     /// <inheritdoc/>
     public async Task GrantUser(GrantUserInput input)
     {
+        //校验角色本身在调用者数据范围内，防止越权操作他人管理的角色
+        var role = (await _sysRoleService.GetListAsync()).FirstOrDefault(it => it.Id == input.Id);
+        if (role == null)
+            throw Oops.Bah("角色不存在");
+        await _sysUserService.CheckApiDataScope(role.OrgId, role.CreateUserId.GetValueOrDefault(), "您没有权限授权该角色");
+        //校验被授权的目标用户都在调用者数据范围内，防止把数据范围外的用户授权到该角色
+        var grantUsers = new List<SysUser>();
+        foreach (var userId in input.GrantInfoList)
+        {
+            var user = await _sysUserService.GetUserById(userId);
+            if (user != null)
+                grantUsers.Add(user);
+        }
+        var orgIds = grantUsers.Select(it => it.OrgId).ToList();
+        var createUserIds = grantUsers.Select(it => it.CreateUserId.GetValueOrDefault()).ToList();
+        await _sysUserService.CheckApiDataScope(orgIds, createUserIds, "您没有权限将这些用户授权给该角色");
         await _sysRoleService.GrantUser(input);
     }
 
@@ -180,14 +206,23 @@ public class RoleService : IRoleService
     #region 方法
 
     /// <summary>
-    /// 检查输入参数
+    /// 检查角色业务规则(赋值ROLE_ORG、禁止全局数据范围)，与数据范围校验无关，Add/Edit都要走
     /// </summary>
     /// <param name="sysRole"></param>
-    private async Task CheckInput(SysRole sysRole)
+    private static void CheckBusinessRule(SysRole sysRole)
     {
         sysRole.Category = CateGoryConst.ROLE_ORG;
         if (sysRole.DefaultDataScope.ScopeCategory == CateGoryConst.SCOPE_ALL)
             throw Oops.Bah("不能添加全局数据范围的角色");
+    }
+
+    /// <summary>
+    /// 检查输入参数(新增场景，此时还没有真实记录，只能用请求体里的机构/创建人校验数据范围)
+    /// </summary>
+    /// <param name="sysRole"></param>
+    private async Task CheckInput(SysRole sysRole)
+    {
+        CheckBusinessRule(sysRole);
         await _sysUserService.CheckApiDataScope(sysRole.OrgId, sysRole.CreateUserId.GetValueOrDefault(), "您没有权限添加该角色");
     }
 
