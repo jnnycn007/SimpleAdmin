@@ -65,7 +65,15 @@
 | A56 | 8 | api-鉴权 | api Web.Core/Controllers/System/Auth/AuthBController.cs:69 | 中 | `LoginByPhone` 无 `[DisplayName]` → 手机验证码登录**整条路径零日志**(访问日志、操作日志都没有)。同 Controller 内 `Login`(:56)/`LoginOut`(:79) 均有 `[DisplayName(EventSubscriberConst.LOGIN_B/LOGIN_OUT_B)]`，唯独它没有 | 漏标 `[DisplayName]` | 待你确认 | 仅静态证据。密码登录可审计、手机登录不可审计，两条登录路径审计能力不对等。注：即便补标，也需用 `LOGIN_B` 常量才会进访问日志(writer:54 按常量值分支)，用字面量会落到操作日志 |
 | A57 | 8 | api-代码生成 | api Web.Core/Controllers/System/Gen/GenBasicController.cs:113-118 | 低 | `ExecGenZip` 挂了 `[DisplayName("执行代码生成(压缩包)")]` 但方法是 `[HttpGet]`，而 `DatabaseLoggingWriter.cs:70` 判据是 `!operation.Contains("/") && method == "POST"` → **标了也不记录**。同 Controller 同功能的 `ExecGenPro`(:101，`[HttpPost]`)正常记录 | writer 以 HTTP 动词而非操作语义判定是否审计 | 待你确认 | 仅静态证据。同一操作走压缩包不留痕、走本地留痕 |
 | A58 | 8 | api-日志 | api Web.Core/Logging/DatabaseLoggingWriter.cs:46,70 | — | 【本轮主控假设，经普查证伪】疑"审计覆盖依赖每个方法记得加 `[DisplayName]`"构成"默认放行"的第五种形态(审计层) | 全量普查不支持：`Controllers/` 下约 100 个 POST 方法中仅 8 个缺 `[DisplayName]`，覆盖率约 92%；且存在显式退出机制 `[SuppressMonitor]`(`UserController.cs:107` 实际使用)，说明作者知道如何正经排除方法。8 处缺失中 3 处有实质影响(已单列 A55/A56)、3 处为个人偏好类小操作(UserCenter 的 setDefaultModule/setRead/setDelete)、1 处显式 `[SuppressMonitor]`、1 处 MQTT 匿名钩子。属个别遗漏，非系统性形态 | 已驳回 | 主控预判模式、数据不支持，如实驳回。**勿在后续轮次重复该假设** |
-
+| A59 | 9 | api-代码生成 | api System/ViewEngine/CodeGen/Backend/Controller.cs.vm:1-22 | 中 | 模板里 `var dataPermission = @Model.DataPermission == "Y";` + `@if(dataPermission) @:[RolePermission]` —— `DataPermission != "Y"` 时**生成的 Controller 既无 `[RolePermission]` 也无 `[SuperAdmin]`**，直撞 `JwtHandler.cs:140` 的 `return true` → 对全体登录用户敞开。模板只提供"挂 RolePermission"与"完全敞开"两种产出，**无法生成 `[SuperAdmin]` 控制器** | 生成器把"默认放行"固化进了模板：不显式选 Y 就是开门 | 待你确认 | 仅静态证据。**本轮最重要发现，但重要性不在自身严重度而在传播性**：本仓库 6 个 P0 全溯源到 JwtHandler:140，而代码生成器是批量生产新病例的机器，一个单选按钮点错就多一个 A12/A22/A23。若采纳"默认拒绝+显式放行"的架构修法，此模板必须同步改，否则边修边产 |
+| A60 | 9 | api-代码生成 | api System/Services/Gen/Basic/GenBasicService.cs:327-349(ExecBackend)、356-376(ExecFronted)、ExecSql | 中 | 三个写文件方法均只做 `if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);` 随后直接 `File.WriteAllText(path, ...)`，**无任何文件存在性检查**，`File.WriteAllText` 静默覆盖同名文件。无备份、无 diff、无确认 | 生成即覆盖，无冲突检测 | 待你确认 | 仅静态证据。现实触发路径：生成代码 → 手工改了生成出来的 Service → 再次生成 → 手改内容静默消失。且若 ClassName/Position 与既有项目文件撞名，覆盖的是真实源码 |
+| A61 | 9 | api-代码生成 | api System/Services/Gen/Basic/GenBasicService.cs:206-207 | 低 | `ExecGenPro` 内 `var backendPath = Path.Combine(new DirectoryInfo(App.WebHostEnvironment.ContentRootPath).Parent.FullName);` 计算后**从未被使用**——方法体内两处 `ExecBackend`/`ExecFronted` 调用走的都是不带 path 参数的重载(即 `backendPath: null`)。另：`Path.Combine` 传单个参数本身是 no-op | 死代码 | 待你确认 | 仅静态证据 |
+| A62 | 9 | api-代码生成 | api System/Services/Gen/Basic/GenBasicService.cs:232-259；Core/Utils/Zip/ZipUtils.cs:435-469 | 低 | `ExecGenZip` 的临时代码目录被 `CompressDirectory(temDir, true)` 删除，但压缩产物 `%TEMP%\<ClassName>.zip` 经 `FileStreamResult` 返回后**全仓无任何删除调用**，永久滞留临时目录。开头的 `File.Delete(temDir + ".zip")` 只在同名 ClassName 重复生成时清掉上一个，不同 ClassName 各留一份，且最后一次生成的永远留着 | 产物无清理 | 待你确认 | 仅静态证据。与 A53(日志无清理)同属"生成了就不管了"家族 |
+| A63 | 9 | api-代码生成 | api System/Services/Gen/Basic/GenBasicService.cs:235 | 低 | `ExecGenZip` 的生成方式校验**被整行注释掉**：`// if (genBasic.GenerateType != GenConst.Zip) throw Oops.Bah("当前配置生成方式为：压缩包");`，而同文件 `ExecGenPro`(:205) 的对称校验 `if (genBasic.GenerateType != GenConst.Pro) throw Oops.Bah(...)` 是启用的 | 一侧校验被禁用，两侧不对称 | 待你确认 | 仅静态证据。需先确认注释掉是有意(允许任意配置导出zip)还是遗留 |
+| A64 | 9 | api-代码生成 | api System/Services/Gen/Basic/GenBasicService.cs:202-229；Services/Gen/Basic/Dto/GenBasicInput.cs:174-180 | 低 | `ExecGenInput.ExecType` 是裸 string，无 `[Required]`、无枚举、无取值校验。逻辑为 `if (ExecType != ExecAll) { if (==ExecBackend) … else if (==ExecFrontend) … } else { 全部执行 }` → **非法值或 null 时 `!= ExecAll` 成立进入第一分支，两个 else if 均不命中，静默什么都不做并返回 200** | 入参无取值域约束 + 分支无兜底 else | 待你确认 | 仅静态证据。属 A20/A26/A27 那个"静默空操作"家族的第四例。注：侦察 agent 曾误报为"非法值走 else 即全部执行"，主控核对源码后纠正为静默空操作 |
+| A65 | 9 | api-代码生成 | api System/ViewEngine/CodeGen/Frontend/index.vue.vm；GenConfigController.cs:37 | 中 | 模板把用户可控字符串**不转义**直接拼进生成代码的字符串字面量，如 `@:{ prop: "@column.FieldNameFirstLower", label: "@column.FieldRemark" …}`。`FieldRemark` 既可来自数据库列注释，也可由用户经 `GenConfigController.EditBatch`(接受 `List<GenConfig>` 直接编辑)修改。含双引号/换行即破坏生成的 .vue/.ts 语法；含 `"; …; //` 即注入代码。`ClassName`/`BusName`/`FunctionName` 同样无转义 | 模板层无输出转义 | 待你确认 | 仅静态证据。非恶意触发很现实：中文列注释里夹一个英文双引号就够了 |
+| A66 | 9 | api-代码生成 | api System/Services/Gen/Basic/GenBasicService.cs:53-58,91-160；Core/Attributes/CodeGenAttribute.cs | 低 | `Add`(:95) 直接 `SqlSugarUtils.GetTableColumns(input.ConfigId, input.DbTable)`，**未校验 `DbTable` 是否在 `GetTables()` 返回的允许列表内**；且 `GetTables(bool isAll)` 在 `isAll=true` 时返回全部 `[SugarTable]` 实体而非仅 `[CodeGenAttribute]` 标记的表，`isAll` 由前端 `Tables(bool isAll = false)` 传入 | `CodeGenAttribute` 白名单只作用于下拉框取值，不作用于实际生成，属装饰性白名单 | 待你确认 | 仅静态证据。读写面均受类级 `[SuperAdmin]` 限制故定低。注：`GetTableColumns` 走 SqlSugar `DbMaintenance.GetColumnInfosByTableName`，非本仓库拼接原始 SQL |
+| A67 | 9 | api-代码生成 | api System/Services/Gen/Basic/GenBasicService.cs:431-504,513-631 | — | 【本轮主控假设，证据不足以定论】疑代码生成存在路径穿越：`ServicePosition`/`ControllerPosition`/`ServiceDictionary`/`ControllerDictionary`/`FrontedPath`/`RouteName`/`ClassName`/`BusName` 全部是 `GenBasicAddInput` 的用户可控 `[Required]` string，无正则/白名单/路径合法性校验，被逐段 `CombinePath` 拼成落盘路径 | **无法证实亦无法证伪**：`CombinePath` 扩展方法的实现不在本仓库(来自 SimpleTool/MoYu NuGet 包)，是否过滤 `..`/绝对路径/盘符无源码可查。且 `FrontedPath` 按设计本就是"由用户指定前端工程位置"的绝对路径基址，往指定位置写文件是功能而非漏洞 | 待确认 | **不下结论**：与 A48 不同，A48 有 `Path.GetFileName()` 可作证伪依据，此处缺依据链。若要定论需反编译 NuGet 包或运行态实测(当前 API 起不来)。读写面受类级 `[SuperAdmin]` 限制，优先级低 |
 ## 已覆盖区域
 
 - 鉴权后端链路（AuthController/AuthService/JwtHandler/事件订阅）— 已静态审查
@@ -83,6 +91,10 @@
 - 日志/监控 — 第8轮完成静态审查(操作日志/访问日志/写入链路/脱敏/清理/性能)。**权限面是干净的**：两个日志 Controller 均有类级[SuperAdmin]；`LogExceptionHandler.cs:29-40` 堆栈不外泄；`Page` 用 IgnoreColumns 排除大字段
 - ⚠️ "系统监控/在线用户"功能**在本仓库不存在**：全仓无 monitor/OnlineUser/SysMonitor 相关 Controller 与视图。佐证 A09(菜单指向 sys/ops/monitor/index 但无该视图)
 - ⚠️ `[DisplayName]` 审计覆盖率经全量普查约92%(100个POST中8个缺)，非系统性问题，见已驳回的 A58
+- 代码生成器 — 第9轮完成静态审查(两个Gen Controller/生成落盘链路/模板渲染/入参校验/前端页面)。**权限面干净**：GenBasic/GenConfig 均有类级[SuperAdmin]
+- ⚠️ 代码生成模板产出的 Controller 默认无鉴权(A59)——若采纳"默认拒绝"架构修法，模板必须同步改，否则边修边产
+- ⚠️ A67 路径穿越**悬而未决**：`CombinePath` 实现在 NuGet 包内不可查，无源码依据链，既不证实也不证伪
+- ✅ A29 佐证：`web/src/views/biz/ops/test/` 与 `api/modules/biz/ops/test.ts` 均仍存在，后端仍无对应 Controller
 - ⚠️ 数据范围的运行态越权验证始终未做(curl/node 执行通道被安全检查封锁)，A12/A22/A23/A31-A33 均只有静态或编译级证据
 
 ## 各轮小结
@@ -154,3 +166,12 @@
 - 审计不对等：手机验证码登录整条路径零日志、密码登录有(A56)；同一个"执行代码生成"，走 POST 留痕、走 GET 不留痕(A57)。
 - **方法论自省**：本轮主控预判 `[DisplayName]` 缺失是"默认放行"的第五种形态，全量普查后覆盖率约92%且存在显式退出机制 `[SuppressMonitor]`，数据不支持该叙事，已驳回(A58)。前四种形态的归纳成立不代表第五种存在，不为凑模式而定罪。
 - 遗留：全部 6 条均为静态证据，无一条运行态复验。
+
+### 第 9 轮（代码生成器）
+- 本轮主题=代码生成器；**仍是纯静态审查，零运行态验证**（API 仍因 Redis 连接超时起不来）。
+- 新增 A59–A66 八条；A67 为主控假设，**证据不足以定论、既不证实也不证伪**，如实挂"待确认"。
+- 权限面同样干净：GenBasic/GenConfig 两个 Controller 均有类级 `[SuperAdmin]`，本轮全部发现的读写面都被超管身份限制着，故无一条定高。
+- **最重要发现是 A59，但它的分量不在自身严重度而在传播性**：`Controller.cs.vm` 里 `DataPermission != "Y"` 就不写 `[RolePermission]`，而模板压根没有产出 `[SuperAdmin]` 的分支——生成器只能产出"受权限控制"或"完全敞开"两种 Controller。本仓库 6 个 P0 全部溯源到 `JwtHandler:140`，代码生成器就是那台批量复制病例的机器。**这直接影响"默认拒绝+显式放行"那个待拍板的架构决定：修了 JwtHandler 而不改模板，等于边修边产。**
+- 主控押注路径穿越，押错了：`FrontedPath`/`ServicePosition` 本就是"由用户指定写到哪"的设计字段，往指定位置写文件是功能不是漏洞；而真正的穿越可能性卡在 `CombinePath` 的实现不在本仓库(NuGet 包内)，无依据链可查(A67)。**与 A48 的区别在于 A48 有 `Path.GetFileName()` 可作证伪依据，此处没有，所以不下结论。**
+- 纠正侦察 agent 一处误报：`ExecType` 非法值并非"走 else 即全部执行"，而是两个 `else if` 均不命中后**静默空操作返回 200**(A64)。属 A20/A26/A27"静默失效"家族第四例。
+- 遗留：全部 8 条均为静态证据；A67 需反编译 NuGet 包或运行态实测方能定论。
