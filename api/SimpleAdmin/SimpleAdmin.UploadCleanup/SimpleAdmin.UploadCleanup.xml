@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>SimpleAdmin.UploadCleanup</name>
+    </assembly>
+    <members>
+        <member name="T:SimpleAdmin.UploadCleanup.UploadCleanupWorker">
+            <summary>
+            清理过期分片上传会话
+            </summary>
+        </member>
+    </members>
+</doc>

@@ -734,9 +734,15 @@
         <member name="M:SimpleAdmin.Application.RoleService.Delete(SimpleAdmin.Core.BaseIdListInput)">
             <inheritdoc/>
         </member>
+        <member name="M:SimpleAdmin.Application.RoleService.CheckBusinessRule(SimpleAdmin.System.SysRole)">
+            <summary>
+            检查角色业务规则(赋值ROLE_ORG、禁止全局数据范围)，与数据范围校验无关，Add/Edit都要走
+            </summary>
+            <param name="sysRole"></param>
+        </member>
         <member name="M:SimpleAdmin.Application.RoleService.CheckInput(SimpleAdmin.System.SysRole)">
             <summary>
-            检查输入参数
+            检查输入参数(新增场景，此时还没有真实记录，只能用请求体里的机构/创建人校验数据范围)
             </summary>
             <param name="sysRole"></param>
         </member>
