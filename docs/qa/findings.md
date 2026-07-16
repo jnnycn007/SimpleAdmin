@@ -42,10 +42,22 @@
 | A33 | 5 | 权限/数据范围 | api RoleService.cs:140-144,186-192(原) | 高(P0) | biz 角色 Edit 的数据范围校验形同虚设：复用 Add 的 CheckInput，校验的是请求体里可篡改的 OrgId/CreateUserId，而非 input.Id 在库中真实角色的字段 | Edit 误用了 Add 的校验(Add 用请求体字段是正确的，新增时无真实记录)；对照 UserService.cs:274-280 是先按 Id 查库再校验 | 已修复(仅编译验证) | commit 9ab64e3：拆出 CheckBusinessRule 保留业务规则，Edit 改用库中真实角色校验，Add 语义不变 |
 | A34 | 5 | 安全/凭证 | api Web.Core/Controllers/System/Mqtt/MqttController.cs:22；System/Services/Mqtt/MqttService.cs:20-59；SeedData/Json/seed_sys_config.json:277,294 | 高 | GET /mqtt/getParameter 无任何权限标注(JwtHandler:140 兜底放行)，直接返回 sys_config 里的 MQTT 用户名/密码，种子值为明文 admin/admin → 任意已登录用户(含最低权限账号)可拿到 broker 共享凭证 | 端点漏标 + 服务端原样下发共享凭证 | 待你确认 | 修法涉及占位符语义(见A35)与 SeedData，属行为改动。可选：改用 $token 方案下发当前 JWT 作 mqtt 密码 / 给端点加权限标注 |
 | A35 | 5 | 消息/mqtt | api System/Services/Mqtt/MqttService.cs:44 | 中 | 密码占位符判断误写成 `password.ToLower() == "$username"`，注释却是"当前token作为mqtt密码"。把配置改成 $token 永远命不中，这条避免共享凭证的逃生通道从未生效 | 复制粘贴上方用户名分支时漏改字面量 | 待你确认 | A34 的成因。修法要先定占位符字面量语义($token? $password?)，一行改动但影响 mqtt 连接行为 |
-| A36 | 5 | 安全/上传 | api Web.Core/Controllers/System/Upload/UploadController.cs:14-38；System/Services/Dev/File/FileService.cs:121-161 | 中 | POST /sys/upload/uploadImg 无任何权限标注 + [DisableRequestSizeLimit]，链路中无文件类型/大小校验(IsPic 仅决定是否生成缩略图，不拦截) → 任意登录用户可上传任意类型、任意大小文件落本地磁盘 | 端点漏标 + 业务层缺校验 | 待你确认 | 需先定"谁该能传、允许什么类型、多大上限"。FileController(Dev版)已加[SuperAdmin]，但这个通用上传口看起来是给业务用户用的 |
+| A36 | 5 | 安全/上传 | api Web.Core/Controllers/System/Upload/UploadController.cs:14-38；System/Services/Dev/File/FileService.cs:121-161 | 中 | POST /sys/upload/uploadImg 无任何权限标注 + [DisableRequestSizeLimit]，链路中无文件类型/大小校验(IsPic 仅决定是否生成缩略图，不拦截) → 任意登录用户可上传任意类型、任意大小文件落本地磁盘 | 端点漏标 + 业务层缺校验 | 待你确认 | 需先定"谁该能传、允许什么类型、多大上限"。FileController(Dev版)已加[SuperAdmin]，但这个通用上传口看起来是给业务用户用的 【轮次7 复核】证据已细化并升级为 A44，webshell/RCE 假设经查不成立（上传目录不在 wwwroot、静态映射段已注释、下载端点为 [SuperAdmin]），维持 P2 存储滥用定性。 |
 | A37 | 5 | 岗位/路由 | api Web.Core/Controllers/Application/Organization/BizPositionController.cs:19 | 中 | BizPositionController 是裸类，既不继承 BaseController 也不实现 IDynamicApiController → 未被 MoYu 动态控制器扫描，biz 岗位管理整页后端路由应全部 404 | 漏写接口标记。同目录 BizOrgController.cs:19/BizRoleController.cs:19/BizUserController.cs:19 均显式 `: IDynamicApiController`；全项目搜该接口命中15个文件，本文件不在其中 | 待你确认 | 类级的[RolePermission]挂在一个根本没被扫描的类上=形同虚设。修法(加 : IDynamicApiController)一行，但会凭空启用一整套此前不存在的端点，属行为改动，请你定 |
 | A38 | 5 | 角色/授权 | web sys/limit/role/components/grantResource.vue:64-65,368-375；grantPermission.vue:34-35 | — | 取证 agent 报告「授权资源」「授权权限」弹窗的确定/取消按钮点击后零请求、零 console、弹窗不关闭，仅右上角×可关 | 静态复核不支持：两个按钮均正常绑定 @click(onClose/handleSubmit)，handleSubmit 无早退分支，FormContainer 确实透传 #footer 插槽。三个观察特征(零请求+零console+×可关)符合"CDP 点击落在视口外元素"的取证工具伪影 | 已驳回 | 复测坐实为取证工具伪影：JS 求值显示两个 footer 按钮 rect.top=698、inViewport=false(弹窗高于视口，footer 被裁在可视区外)，坐标点击落空；改用 DOM .click() 程序化触发后，POST /api/sys/limit/role/grantResource 返回 200 且弹窗正常关闭(.el-dialog 计数 1→0)。按钮与 @click 绑定均正常，非产品 bug |
 | A39 | 5 | 前端/公共组件 | web src/components/Form/FormContainer/index.vue:31,34,58 | 低 | FormContainer 内部自建 `const visible = ref(false)` 却从未声明 modelValue prop；父组件的 v-model 是靠 `v-bind="$attrs"`(第34行，位置在 v-model 之后覆盖了它)阴差阳错透传给 el-dialog 才生效 | 组件契约与实现不符，能跑但脆(依赖属性绑定顺序) | 待你确认 | 全站弹窗都走这个公共组件，改动面大。不改行为的前提下应显式声明 modelValue prop，属公共组件改动 |
+| A40 | 6 | api-配置 | api System/Services/Ops/Config/ConfigService.cs:120-133 | 高 | `Edit` 原先直接信任请求体：`CheckInput`(:199-210) 第 209 行无条件 `sysConfig.Category = CateGoryConst.CONFIG_BIZ_DEFINE`，导致内置配置(SYS_BASE/MQTT_BASE 等)被编辑时会被静默改写成 BIZ_DEFINE——既绕过 `Delete`(:167-176) 只允许删 BIZ_DEFINE 的内置保护，又使原分类的缓存 key 不被刷新 | 校验请求体字段而非按 Id 查真实记录（invariant 层，同 A31-A33 根因家族） | 已修复 | 提交 `fecc904`。修法：按 Id 查出真实记录后校验 `config.Category != CONFIG_BIZ_DEFINE` 则拒绝。**仅编译验证**(`dotnet build SimpleAdmin.System --framework net8.0` 0 error)，运行态复验未执行 |
+| A41 | 7 | web-上传 | web/src/api/modules/sys/upload/index.ts:26-28 | 低 | uploadImg 用 `http.get` 发 FormData；`instance.ts:174-176` 把它塞进 axios 的 params(query string)，`instance.ts:93-98` 拦截器又对 FormData 实例做对象展开 `{...config.params, _t}` —— FormData 无自有可枚举属性，展开结果为 `{}`，文件被静默丢弃，实发请求是 `GET uploadImg?_t=时间戳`；后端 `UploadController.cs:28` 是 `[HttpPost]`+`[Consumes(multipart/form-data)]` | 前端 get/post 错配 + FormData 不可对象展开；同类接口 `biz/document.ts:29-54` 三个都用 `http.post` 且显式设 Content-Type，唯独 uploadImg 例外 | 待你确认 | 仅静态证据(运行态未验证)。与 A42/A43 合看：该接口无任何活调用点，坏了也没人发现 |
+| A42 | 7 | web-上传 | web/src/components/Upload/UploadImgs.vue | 低 | 组件全仓无任何模板标签引用（`<UploadImgs` 只匹配到自身 name 声明行 :46），无人 import 使用 | 死组件 | 待你确认 | 仅静态证据。它是 uploadImg 唯二调用点之一 |
+| A43 | 7 | web-上传 | web/src/components/Upload/UploadImg.vue:106-115 | 低 | 唯二使用处 `sysBaseConfig.vue:12,22` 均传 `:auto-upload="false"`，走 106-109 行 base64 分支，永不执行 `api(formData)` | uploadImg 的另一个调用点也是死的 | 待你确认 | 仅静态证据 |
+| A44 | 7 | api-上传 | api Web.Core/Controllers/System/Upload/UploadController.cs:28 | 中 | 端点无 `[SuperAdmin]`/`[RolePermission]` → 撞 `JwtHandler.cs:140` 默认放行，任意已登录用户可调；叠加 `[DisableRequestSizeLimit]` 且 FileService 全链路无大小/MIME/后缀白名单校验 → 磁盘耗尽与存储滥用。**不构成 webshell/RCE**：落盘根目录种子默认值 `C:/defaultUploadFolder`(绝对路径，不在 wwwroot 内)，全仓唯一生效静态中间件是 `Web.Core/Startup.cs:71` 裸 `app.UseStaticFiles()`(只服务 wwwroot)，带 `RequestPath="/files"`+`ServeUnknownFileTypes=true` 的那段已整体注释掉；下载走 `FileController`(类级 `[SuperAdmin]`，按 Id 查库取 StoragePath) | 漏注解=默认放行，同 A12/A22/A23 根因线；且读端点上了 `[SuperAdmin]` 锁、写端点被忘 | 待你确认 | 仅静态证据。A36 的细化版。结合 A41-A43，该端点前端零活调用点，是无人使用却敞开的孤儿写端点——**建议删端点而非给它补校验，需你拍板** |
+| A45 | 7 | api-上传 | api Application/Services/Document/Common/DocumentStorageService.cs:132-137 | 中 | SaveChunk 的分片 sha256 校验整个裹在 `if (!string.IsNullOrWhiteSpace(chunkHash))` 里，chunkHash 传不传由前端决定；不传则完全跳过校验直接落盘。另 :125-131：目标分片已存在且未传 hash 时直接 `return`，静默丢弃本次内容 | 完整性校验由被校验方自己决定是否开启 | 待你确认 | 仅静态证据。属"校验靠调用方记得"的同一根因家族 |
+| A46 | 7 | api-上传 | api Application/Services/Document/Common/DocumentStorageService.cs:143-155 | 中 | `tempPath = $"{targetPath}.uploading"` 是确定性路径，不含请求/线程标识；同一 session 同一 chunkIndex 并发（重试未取消旧请求、用户双击）会同时 `File.Create` 同一个 `.uploading` 文件，随后 `File.Delete(targetPath)`+`File.Move` 互踩 | 无并发锁 + 共享确定性临时文件名 | 待确认 | **需运行态复现，当前 API 起不来(Redis 连接超时)，仅静态推演** |
+| A47 | 7 | api-启动 | api Web.Core/Components/WebSettingsComponent.cs:36-40 | 低 | `WebSettingsApplicationComponent.Load` 方法体为空，而 `Web.Core/Startup.cs:54` 仍在 `app.UseComponent<WebSettingsApplicationComponent>(env)` 调用它 | 死代码 | 待你确认 | 仅静态证据 |
+| A48 | 7 | api-上传 | api Application/Services/Document/DocumentService.cs:310-315；DocumentStorageService.cs:201 | — | 【本轮主控假设，经查不成立】疑分片合并存在路径穿越：`NormalizeRelativePath`(`DocumentService.cs:730-733`) 只做 `Replace('\\','/')`+`Trim('/')`，不过滤 `..` 段 | 但 `DocumentService.cs:313` 在赋给 `session.FileName` 前经过 `Path.GetFileName()`，已剥离所有目录分隔符，故 `mergedPath = Path.Combine(mergedDir, 纯文件名)`；落盘侧 `BuildLocalStoragePath` 也只取 `Path.GetExtension()`。Windows/Linux 两种分隔符语义下均不成立 | 已驳回 | 静态证据充分，**勿在后续轮次重复调查** |
+| A49 | 6 | api-字典 | api System/Services/Ops/Dict/DictService.cs 的 `Edit` | 中 | `Edit` 缺少内置分类(FRM)守卫，与 A40 修复前的 ConfigService.Edit 是同一形状：信任请求体分类而非按 Id 查真实记录 | 同 A40 根因(invariant 层) | 待你确认 | 仅静态证据，行号待补。A40 已按"查真实记录再校验"修好，此处可照搬同一模式 |
+| A50 | 6 | api-配置 | api Web.Core/Controllers/System/Ops/ConfigController.cs 的 `List()` | 中 | `List()` 返回配置时未对敏感值做脱敏，MQTT 密码(`MQTT_PARAM_PASSWORD`)以明文出现在响应中 | 无出参脱敏 | 待你确认 | 仅静态证据，行号待补。关联 A34/A35(MqttService 密码占位符分支) |
+| A51 | 6 | api-公共 | api Web.Core/Controllers/System/CommonController.cs 的 `SysInfo()` | 中 | 匿名可访问，返回全部 SYS_BASE 配置，仅靠一份**硬编码的 4 个 key 排除清单**做过滤——新增任何敏感 SYS_BASE 配置项都会默认泄露 | 排除清单是黑名单而非白名单（"默认放行"的第四种形态：接口层漏注解 / 数据层忘调用 / 不变量层信请求体 / 出参层黑名单） | 待你确认 | 仅静态证据，行号待补 |
 
 ## 已覆盖区域
 
@@ -57,6 +69,7 @@
 - 用户/角色/机构/岗位 — 已完成浏览器CRUD取证(用户/角色增改删搜/授权/建受限用户qauser) + 后端四链路静态审查
 - ✅ A04 越权已运行态验证并修复(见A12)；biz/organization 下 role+position 搜索副本同 A13 模式待验
 - 消息中心/文件管理 越权面 — 第4轮运行态坐实并修复(A22/A23)，页面 UI 本身未系统性走查
+- 文件上传（含分片上传、UploadCleanup 清理）— 第7轮完成静态审查
 - 全站搜索列参数对齐 — 第4轮横扫(A20/A26/A27/A28)，静默失效模式已识别
 - Controller 权限标注全量清点 — 第5轮完成(31个)。系统管理面全部有[SuperAdmin]或[RolePermission]；类级无标注的 UserCenter/AuthB/Common 属自助面或匿名面，设计如此。**除已修的外无新增漏标 P0**
 - 资源与权限(数据范围) — 第5轮完成：biz 角色授权链路静态审查(查出A31-A33三个P0)、菜单管理+角色管理+授权资源/数据范围弹窗浏览器取证
@@ -113,3 +126,12 @@
   漏调即默认放行。JwtHandler:140 的"无标注即放行"是接口级的表现，RoleService 的"忘了调 CheckApiDataScope"
   是数据级的表现。默认值反了。彻底修法是默认拒绝+显式放行，属架构改动，待用户拍板。
 - 累积待你确认：A02 A03 A07 A09 A16 A17 A20 A21 A26 A27 A29 A34 A35 A36 A37 A39。
+
+### 第 7 轮（文件上传）
+- 本轮主题=文件上传含分片；**纯静态代码审查，零运行态验证**（API 因 `RedisCacheService.cs:82` Redis 连接超时起不来，浏览器侦察全程停摆），证据等级如实降档为"仅静态证据"。
+- 新增 A41–A47 七条（A48 为主控自身假设，已自行驳回）。
+- 最大收获：uploadImg 这条链是"死代码 + 坏实现 + 敞开端点"三合一——前端零活调用点(A41/A42/A43)，实现本身因 FormData 被对象展开而必然丢文件，后端端点却对全体登录用户敞开(A44)。
+- 分片主链路（DocumentController）**权限是好的**：类级 `[RolePermission]` + `IDynamicApiController`，路径穿越也已被 `Path.GetFileName()` 挡住(A48 已驳回)；问题集中在完整性校验可选(A45)与并发临时文件互踩(A46)。
+- 遗留：A46 需运行态复现；A44 的处置（删端点 vs 补校验）待用户拍板。
+- **台账维护**：本轮发现 A40 号被提交 `fecc904` 占用但行未落盘（第 6 轮上下文截断所致），已回填 A40(ConfigService.Edit 内置分类，已修复)，第 7 轮整体顺延为 A41-A48；另补录第 6 轮判定遗留的 A49-A51。
+- 累积待你确认新增：A41 A42 A43 A44 A45 A47 A49 A50 A51。
