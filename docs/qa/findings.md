@@ -58,6 +58,13 @@
 | A49 | 6 | api-字典 | api System/Services/Ops/Dict/DictService.cs 的 `Edit` | 中 | `Edit` 缺少内置分类(FRM)守卫，与 A40 修复前的 ConfigService.Edit 是同一形状：信任请求体分类而非按 Id 查真实记录 | 同 A40 根因(invariant 层) | 待你确认 | 仅静态证据，行号待补。A40 已按"查真实记录再校验"修好，此处可照搬同一模式 |
 | A50 | 6 | api-配置 | api Web.Core/Controllers/System/Ops/ConfigController.cs 的 `List()` | 中 | `List()` 返回配置时未对敏感值做脱敏，MQTT 密码(`MQTT_PARAM_PASSWORD`)以明文出现在响应中 | 无出参脱敏 | 待你确认 | 仅静态证据，行号待补。关联 A34/A35(MqttService 密码占位符分支) |
 | A51 | 6 | api-公共 | api Web.Core/Controllers/System/CommonController.cs 的 `SysInfo()` | 中 | 匿名可访问，返回全部 SYS_BASE 配置，仅靠一份**硬编码的 4 个 key 排除清单**做过滤——新增任何敏感 SYS_BASE 配置项都会默认泄露 | 排除清单是黑名单而非白名单（"默认放行"的第四种形态：接口层漏注解 / 数据层忘调用 / 不变量层信请求体 / 出参层黑名单） | 待你确认 | 仅静态证据，行号待补 |
+| A52 | 8 | api-日志 | api Web.Core/Logging/DatabaseLoggingWriter.cs:64,136-153；System/Services/Auth/Auth/Dto/AuthInput.cs:36-62 | 中 | 登录**失败**时整个 `LoginInput`(含 `Password`)被序列化存入 `sys_log_operate_*.ParamJson`：`AuthService.cs:89` 密码不符 → `throw Oops.Bah` → writer:64 走异常分支 → `CreateOperationLog` → `ParamJson = Parameters[0].Value.ToJsonString()`，无字段级过滤。存的是 SM2 密文非明文，但服务端登录接口收的就是该密文(`Sm2Decrypt` 后比对)且无 nonce/时间戳 → **该密文可原样重放登录**。前端 `oplog/components/detail.vue:73-81` 原样 `JSON.stringify` 渲染 | 全仓搜 `脱敏\|mask\|desensit\|JsonIgnore` 零命中，无任何脱敏机制；`LoginInput.Password` 无序列化排除特性 | 待你确认 | 仅静态证据。登录**成功**路径安全(走 `CreateVisitLog`，`SysLogVisit` 无 ParamJson 字段)。触发不需攻击者：密码正确但租户/验证码错，同样抛异常、同样落库。读取面受 `[SuperAdmin]` 限制故定中；但与 A03(SM2 私钥硬编码在配置)叠加=拿库+拿配置即得明文 |
+| A53 | 8 | api-日志 | api System/Services/LogAudit/OperateLog/OperateLogService.cs:31,107-111；VisitLog/VisitLogService.cs | 中 | "清空日志"清不干净：`Delete` 用 `.SplitTable(tabs => tabs.Take(_maxTabs))`，`_maxTabs = 100`(:31)。操作日志按 `{year}{month}{day}` 按天分表 → 100 张表 ≈ 100 天。超过 100 天的分表 `Page`/`Detail`/`Delete` 一律够不着：查不到、删不掉、永久滞留磁盘。用户以为清空了，实际只清了近 100 天 | `Take(_maxTabs)` 同时作用于查询与删除，成了数据可达性的硬天花板 | 待你确认 | 仅静态证据。且全仓(含 SimpleAdmin.Background)无任何定时清理/TTL/归档代码，唯一入口就是这个清不干净的按钮 |
+| A54 | 8 | api-日志 | api System/Services/LogAudit/OperateLog/OperateLogService.cs:34-44；VisitLogService.cs:24-33；Entity/SysLogVisit.cs;SysLogOperate.cs | 中 | 日志分页无时间范围约束(`OperateLogPageInput`/`VisitLogPageInput` 全继承链只有 `Category`+`Account`+基类，无时间字段)；`SearchKey` 过滤走 `it.Name.Contains(k) \|\| it.OpIp.Contains(k)` 即 SQL `LIKE '%k%'`(前后模糊，索引不可用)，且对最多 100 张分表逐张执行；两个日志实体的 `[SugarColumn]` 参数只有 ColumnName/Description/Length/DataType/IsNullable，**无任何索引标注** | 无时间范围强制 + 前后模糊 LIKE + 无索引 + 跨百表 | 待你确认 | 仅静态证据，未实测。日志表是全站增长最快的表，这三者叠加 |
+| A55 | 8 | api-日志 | api Web.Core/Controllers/System/LogAudit/LogOperateController.cs:64-68；LogVisitController.cs:64-68 | 中 | 两个"清空日志"端点均无 `[DisplayName]`，而 `DatabaseLoggingWriter.cs:46,70` 要求 `DisplayTitle != null` 且 `method=="POST"` 才记操作日志 → **清空日志这个动作本身不留任何痕迹**。超管清空后，日志没了，"谁清的/何时清的"也没了 | 漏标 `[DisplayName]` | 待你确认 | 仅静态证据。与 A53 叠加：该按钮既清不干净、清的动作又不留痕 |
+| A56 | 8 | api-鉴权 | api Web.Core/Controllers/System/Auth/AuthBController.cs:69 | 中 | `LoginByPhone` 无 `[DisplayName]` → 手机验证码登录**整条路径零日志**(访问日志、操作日志都没有)。同 Controller 内 `Login`(:56)/`LoginOut`(:79) 均有 `[DisplayName(EventSubscriberConst.LOGIN_B/LOGIN_OUT_B)]`，唯独它没有 | 漏标 `[DisplayName]` | 待你确认 | 仅静态证据。密码登录可审计、手机登录不可审计，两条登录路径审计能力不对等。注：即便补标，也需用 `LOGIN_B` 常量才会进访问日志(writer:54 按常量值分支)，用字面量会落到操作日志 |
+| A57 | 8 | api-代码生成 | api Web.Core/Controllers/System/Gen/GenBasicController.cs:113-118 | 低 | `ExecGenZip` 挂了 `[DisplayName("执行代码生成(压缩包)")]` 但方法是 `[HttpGet]`，而 `DatabaseLoggingWriter.cs:70` 判据是 `!operation.Contains("/") && method == "POST"` → **标了也不记录**。同 Controller 同功能的 `ExecGenPro`(:101，`[HttpPost]`)正常记录 | writer 以 HTTP 动词而非操作语义判定是否审计 | 待你确认 | 仅静态证据。同一操作走压缩包不留痕、走本地留痕 |
+| A58 | 8 | api-日志 | api Web.Core/Logging/DatabaseLoggingWriter.cs:46,70 | — | 【本轮主控假设，经普查证伪】疑"审计覆盖依赖每个方法记得加 `[DisplayName]`"构成"默认放行"的第五种形态(审计层) | 全量普查不支持：`Controllers/` 下约 100 个 POST 方法中仅 8 个缺 `[DisplayName]`，覆盖率约 92%；且存在显式退出机制 `[SuppressMonitor]`(`UserController.cs:107` 实际使用)，说明作者知道如何正经排除方法。8 处缺失中 3 处有实质影响(已单列 A55/A56)、3 处为个人偏好类小操作(UserCenter 的 setDefaultModule/setRead/setDelete)、1 处显式 `[SuppressMonitor]`、1 处 MQTT 匿名钩子。属个别遗漏，非系统性形态 | 已驳回 | 主控预判模式、数据不支持，如实驳回。**勿在后续轮次重复该假设** |
 
 ## 已覆盖区域
 
@@ -73,6 +80,9 @@
 - 全站搜索列参数对齐 — 第4轮横扫(A20/A26/A27/A28)，静默失效模式已识别
 - Controller 权限标注全量清点 — 第5轮完成(31个)。系统管理面全部有[SuperAdmin]或[RolePermission]；类级无标注的 UserCenter/AuthB/Common 属自助面或匿名面，设计如此。**除已修的外无新增漏标 P0**
 - 资源与权限(数据范围) — 第5轮完成：biz 角色授权链路静态审查(查出A31-A33三个P0)、菜单管理+角色管理+授权资源/数据范围弹窗浏览器取证
+- 日志/监控 — 第8轮完成静态审查(操作日志/访问日志/写入链路/脱敏/清理/性能)。**权限面是干净的**：两个日志 Controller 均有类级[SuperAdmin]；`LogExceptionHandler.cs:29-40` 堆栈不外泄；`Page` 用 IgnoreColumns 排除大字段
+- ⚠️ "系统监控/在线用户"功能**在本仓库不存在**：全仓无 monitor/OnlineUser/SysMonitor 相关 Controller 与视图。佐证 A09(菜单指向 sys/ops/monitor/index 但无该视图)
+- ⚠️ `[DisplayName]` 审计覆盖率经全量普查约92%(100个POST中8个缺)，非系统性问题，见已驳回的 A58
 - ⚠️ 数据范围的运行态越权验证始终未做(curl/node 执行通道被安全检查封锁)，A12/A22/A23/A31-A33 均只有静态或编译级证据
 
 ## 各轮小结
@@ -135,3 +145,12 @@
 - 遗留：A46 需运行态复现；A44 的处置（删端点 vs 补校验）待用户拍板。
 - **台账维护**：本轮发现 A40 号被提交 `fecc904` 占用但行未落盘（第 6 轮上下文截断所致），已回填 A40(ConfigService.Edit 内置分类，已修复)，第 7 轮整体顺延为 A41-A48；另补录第 6 轮判定遗留的 A49-A51。
 - 累积待你确认新增：A41 A42 A43 A44 A45 A47 A49 A50 A51。
+
+### 第 8 轮（日志/监控）
+- 本轮主题=日志与监控；**同样是纯静态审查，零运行态验证**（API 仍因 Redis 连接超时起不来），每条均标"仅静态证据"。
+- 新增 A52–A57 六条（A58 为主控自身假设，经全量普查证伪、已自行驳回）。
+- **难得的反例：这一轮权限面是干净的**。两个日志 Controller 都规矩挂了类级 `[SuperAdmin]`；`LogExceptionHandler.cs:29-40` 把非友好异常统一替换成固定文案，堆栈/SQL 不外泄；`Page` 用 `IgnoreColumns` 排除 ParamJson/ResultJson 大字段；登录**成功**走 `CreateVisitLog`，而 `SysLogVisit` 表根本没有 ParamJson 字段。这些都是有人认真想过的痕迹。
+- 最大收获：**问题全部集中在"日志自身的治理"，而不是权限**。三条串成一条线——日志里存着可重放的凭据(A52)、清空按钮清不干净(A53)、而清空这个动作还不留痕(A55)。
+- 审计不对等：手机验证码登录整条路径零日志、密码登录有(A56)；同一个"执行代码生成"，走 POST 留痕、走 GET 不留痕(A57)。
+- **方法论自省**：本轮主控预判 `[DisplayName]` 缺失是"默认放行"的第五种形态，全量普查后覆盖率约92%且存在显式退出机制 `[SuppressMonitor]`，数据不支持该叙事，已驳回(A58)。前四种形态的归纳成立不代表第五种存在，不为凑模式而定罪。
+- 遗留：全部 6 条均为静态证据，无一条运行态复验。
