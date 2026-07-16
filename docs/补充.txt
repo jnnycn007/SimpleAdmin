@@ -1,0 +1,9 @@
+1.GitHub组织是DotNet-MoYu
+2.我说的除了sqlsugar尽量不引用第三方库不说都不引用，你最好列个清单，让我选择哪些保留哪些可以重构或者将对方的代码copy过来
+3.系统可扩展性要写出来，比如用户使用我的系统如果开发自己的系统，创建自己的方法，实体等等
+4.前端除了awesome-design-md，还有一个typeui的mcp，基于这个是不是好点，他有很多的主题skills可以选。
+5.前端vue技术栈我不想用element plus，可以用naive ui或者SoybeanUI，或者我的vue端可以支持适配这两种ui
+6.关于前端页面的设计，我是否可以用现成的AI设计工具，比如claude design，通过claude design或者figma写一套UI出来
+7.后端代码中尽量不要出现写死的字符串，比如你在后端横切机制里写的**权限过滤**:`[Permission("sys:user:add")]` 特性，我之前是写了一个特效从redis查的
+8.系统要支持docker发布打包
+9.还有什么没考虑到的欢迎补充
