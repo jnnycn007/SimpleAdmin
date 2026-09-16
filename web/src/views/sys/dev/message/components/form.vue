@@ -74,7 +74,7 @@
 import { SysMessage, messageApi, sysOrgApi, sysPositionApi, sysRoleApi, sysUserApi, SysUser, SysRole } from "@/api";
 import { required } from "@/utils/formRules";
 import { FormOptEnum, MessageTypeDictEnum, SysDictEnum, MessageReceiverTypeDictEnum, MessageSendWayDictEnum } from "@/enums";
-import { FormInstance } from "element-plus";
+import { ElMessage, FormInstance } from "element-plus";
 import { useDictStore } from "@/stores/modules";
 import { UserSelectorInstance } from "@/components/Selectors/UserSelector/interface";
 import { RoleSelectorInstance } from "@/components/Selectors/RoleSelector/interface";

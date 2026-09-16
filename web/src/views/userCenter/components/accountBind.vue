@@ -32,6 +32,7 @@
 <script setup lang="ts">
 //导入修改密码组件
 import UpdatePassword from "./updatePassword.vue";
+import { ElMessage } from "element-plus";
 
 const updatePasswordRef = ref<InstanceType<typeof UpdatePassword> | null>(null);
 

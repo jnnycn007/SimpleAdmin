@@ -52,6 +52,7 @@
 
 <script setup lang="ts">
 import { ESignInstance } from "@/components/ESign/interface";
+import { ElMessage } from "element-plus";
 const visible = ref(false); //是否显示表单
 const options = reactive({
   isCrop: false, //是否开启裁剪

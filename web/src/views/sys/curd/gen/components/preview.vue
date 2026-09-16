@@ -31,7 +31,7 @@
 
 <script setup lang="ts">
 import { GenCode, genBasicApi } from "@/api";
-import { TabPaneName } from "element-plus";
+import { ElMessage, TabPaneName } from "element-plus";
 const visible = ref(false); //是否显示表单
 
 // 选项接口

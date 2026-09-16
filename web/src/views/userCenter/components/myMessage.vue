@@ -68,7 +68,7 @@ import { Search } from "@element-plus/icons-vue";
 import { useDictStore, useMessageStore } from "@/stores/modules";
 import { FormOptEnum, SysDictEnum } from "@/enums";
 import { useHandleData } from "@/hooks/useHandleData";
-import { MenuItemRegistered } from "element-plus";
+import { ElMessage, MenuItemRegistered } from "element-plus";
 import { ColumnProps, ProTableInstance } from "@/components/ProTable/interface";
 import { SysMessage, userCenterApi, UserCenter } from "@/api";
 import MyMessageDetail from "./myMessageDetail.vue";
